@@ -14,147 +14,146 @@
 #include <sys/types.h>
 #include <unistd.h>
 #define S(x) sizeof(x)
-#define NR(x) (S(x)/S(*x))
+#define N(x) (S(x)/S(*x))
 #define CK(s) if((s)<0) { perror(#s); exit(1); }
-#define F(a) for(i=0;i<N_c;i++) { a; }
-#define CM(f) void f(int m, char *s)
-#define CH(f) void f(int m)
-#define N "\r\n"
-#define N_c 9
-#define N_r 3
-#define KS ss(m, cs[m]);
+#define F(x) for(a=0;a<N(c);a++) { x; }
+#define CM(f) void f(int b, char *s)
+#define CH(f) void f(int b)
+#define R "\r\n"
+#define KS ss(b, B.s);
+#define B c[b]
+#define A c[a]
 enum {
 	no, so, we, ea
 };
-const char *a[]={"quit", "look", "n", "north", "s", "south", "w", "west", "e", "east", "say", "help", "name"};
-int c[N_c], cr[N_c], cs[N_c];
-char b[N_c][1024];
-char cn[N_c][16];
-char *rd[N_r]={
-	"A large grassy field."N"To the south is a gate"N,
-	"A large iron gate."N"To the north is a field, to the south is an ampitheater."N,
-	"An abandoned ampitheater."N"To the north is a gate."N,
+const char *q[]={"quit", "look", "n", "north", "s", "south", "w", "west", "e", "east", "say", "help", "name"};
+struct {
+	int f, r, s;
+	char n[16], b[999];
+} c[9];
+struct {
+	int p[4];
+	char *d;
+} r[] = {
+	{{-1,1,-1,-1}, "A large grassy field."R"To the south is a gate"R},
+	{{0,2,-1,-1}, "A large iron gate."R"To the north is a field, to the south is an ampitheater."R},
+	{{1,-1,-1,-1}, "An abandoned ampitheater."R"To the north is a gate."R},
 };
-int rp[N_r][4]={
-	{-1,1,-1,-1},
-	{0,2,-1,-1},
-	{1,-1,-1,-1},
-};
-void wr(int m, const char *s) {
-	CK(write(c[m], s, strlen(s)));
+void wr(int b, const char *s) {
+	CK(write(B.f, s, strlen(s)));
 }
 CH(cl) {
-	int i;
-	close(c[m]);
-	c[m]=0;
-	F(if(c[i]&&cr[i]==cr[m]) { wr(i, cn[m]); wr(i, " has disconnected"N); });
+	int a;
+	close(B.f);
+	B.f=0;
+	F(if(A.f&&A.r==B.r) { wr(a, B.n); wr(a, " has disconnected"R); });
 }
-void ss(int m, int s) {
-	cs[m]=s;
+void ss(int b, int s) {
+	B.s=s;
 	if(s==0) {
-		wr(m, ">");
+		wr(b, ">");
 	}
 }
 CM(c_q) {
-	cl(m);
+	cl(b);
 }
 CM(c_l) {
-	int i, f;
-	wr(m, rd[cr[m]]);
+	int a, f;
+	wr(b, r[B.r].d);
 	f=0;
-	F(if(i!=m&&c[i]&&cr[i]==cr[m]) { wr(m, cn[i]); wr(m, " "); f++; });
+	F(if(a!=b&&A.f&&A.r==B.r) { wr(b, A.n); wr(b, " "); f++; });
 	if(f==1) {
-		wr(m, "is here"N);
+		wr(b, "is here"R);
 	} else if(f) {
-		wr(m, "are here"N);
+		wr(b, "are here"R);
 	}
 	KS;
 }
-void go(int m, int d) {
-	int i, t=rp[cr[m]][d];
+void go(int b, int d) {
+	int a, t=r[B.r].p[d];
 	if(t<0) {
-		wr(m,"You can't go that way"N);
+		wr(b,"You can't go that way"R);
 	} else {
-		F(if(i!=m&&c[i]&&cr[i]==cr[m]) { wr(i, cn[m]); wr(i, " leaves."N); });
-		cr[m]=t;
-		F(if(i!=m&&c[i]&&cr[i]==cr[m]) { wr(i, cn[m]); wr(i, " enters."N); });
+		F(if(a!=b&&A.f&&A.r==B.r) { wr(a, B.n); wr(a, " leaves."R); });
+		B.r=t;
+		F(if(a!=b&&A.f&&A.r==B.r) { wr(a, B.n); wr(a, " enters."R); });
 	}
-	c_l(m, "");
+	c_l(b, "");
 }
 CM(c_n) {
-	go(m, no);
+	go(b, no);
 }
 CM(c_s) {
-	go(m, so);
+	go(b, so);
 }
 CM(c_w) {
-	go(m, we);
+	go(b, we);
 }
 CM(c_e) {
-	go(m, ea);
+	go(b, ea);
 }
 CM(c_y) {
-	int i;
-	wr(m, "You say \"");
-	wr(m, s);
-	wr(m, "\""N);
-	F(if(m!=i&&c[i]&&cr[i]==cr[m]) { wr(i, cn[m]); wr(i, " says \""); wr(i, s); wr(i, "\""N); });
+	int a;
+	wr(b, "You say \"");
+	wr(b, s);
+	wr(b, "\""R);
+	F(if(a!=b&&A.f&&A.r==B.r) { wr(a, B.n); wr(a, " says \""); wr(a, s); wr(a, "\""R); });
 	KS;
 }
 CM(c_h) {
 	int j;
-	for(j=0;j<NR(a);j++) {
-		wr(m, a[j]);
-		wr(m, " ");
+	for(j=0;j<N(q);j++) {
+		wr(b, q[j]);
+		wr(b, " ");
 	}
-	wr(m, N);
+	wr(b, R);
 	KS;
 }
 CM(c_a) {
-	int i;
+	int a;
 	char *p;
-	if(strlen(s)>=S(*cn)) s[S(*cn)-1]=0;
+	if(strlen(s)>=S(c->n)) s[S(c->n)-1]=0;
 	for(p=s;*p;p++) if(!isalnum(*p)) *p='_';
 	if(*s) {
-		F(if(i!=m&&c[i]&&cr[i]==cr[m]&&!strncmp(cn[i], s, S(*cn))) { wr(m, "Name already used"N); KS; return; } );
+		F(if(a!=b&&A.f&&A.r==B.r&&!strncmp(A.n, s, S(c->n))) { wr(b, "Name already used"R); KS; return; } );
 
-		F(if(i!=m&&c[i]&&cr[i]==cr[m]) { wr(i, cn[m]); wr(i, " is now known as "); wr(i, s); wr(i, N); });
-		snprintf(cn[m], S(cn[m]), "%s", s);
-		wr(m, "Your name is now \"");
-		wr(m, cn[m]);
-		wr(m, "\""N);
+		F(if(a!=b&&A.f&&A.r==B.r) { wr(a, B.n); wr(a, " is now known as "); wr(a, s); wr(a, R); });
+		strcpy(B.n, s);
+		wr(b, "Your name is now \"");
+		wr(b, B.n);
+		wr(b, "\""R);
 	}
 	KS;
 }
-CM((*f[NR(a)]))={c_q, c_l, c_n, c_n, c_s, c_s, c_w, c_w, c_e, c_e, c_y, c_h, c_a};
+CM((*f[N(q)]))={c_q, c_l, c_n, c_n, c_s, c_s, c_w, c_w, c_e, c_e, c_y, c_h, c_a};
 CH(sl) {
 	int j, l;
-	if(b[m][0]) {
-		for(j=0;j<NR(a);j++) {
-			l=strcspn(b[m]," ");
-			if(l==strlen(a[j]) && !strncmp(b[m], a[j], l)) {
-				while(isspace(b[m][l])) l++;
-				f[j](m, b[m]+l);
+	if(B.b[0]) {
+		for(j=0;j<N(q);j++) {
+			l=strcspn(B.b," ");
+			if(l==strlen(q[j]) && !strncmp(B.b, q[j], l)) {
+				while(isspace(B.b[l])) l++;
+				f[j](b, B.b+l);
 				goto x;
 			}
 		}
-		wr(m, "Try 'help' for commands."N);
+		wr(b, "Try 'help' for commands."R);
 	}
 	KS;
 x:
-	b[m][0]=0;
+	B.b[0]=0;
 }
 CH(nc) {
-	b[m][0]=0;
-	cr[m]=0;
-	cs[m]=0;
-	snprintf(cn[m], S(cn[m]), "Someone%u", m+1);
-	c_l(m,"");
+	B.b[0]=0;
+	B.r=0;
+	B.s=0;
+	snprintf(B.n, S(B.n), "Someone%u", b+1);
+	c_l(b,"");
 }
 int main(void) {
-	int s, i, n, m, t;
+	int s, a, n, m, t;
 	struct sockaddr_in x;
-	fd_set r;
+	fd_set z;
 	socklen_t l;
 	char h[2]={0};
 	signal(SIGPIPE, SIG_IGN);
@@ -164,20 +163,20 @@ int main(void) {
 	CK(bind(s, &x, S(x)));
 	CK(listen(s,1));
 	for(;;) {
-		FD_ZERO(&r);
-		FD_SET(s, &r);
+		FD_ZERO(&z);
+		FD_SET(s, &z);
 		m=s;
-		F(if(c[i]) { FD_SET(c[i], &r); if(c[i]>m) m=c[i]; });
-		CK(n=select(m+1, &r, 0, 0, 0));
-		if(FD_ISSET(s, &r)) {
+		F(if(A.f) { FD_SET(A.f, &z); if(A.f>m) m=A.f; });
+		CK(n=select(m+1, &z, 0, 0, 0));
+		if(FD_ISSET(s, &z)) {
 			l=S(x);
 			CK(t=accept(s, &x, &l));
-			F(if(!c[i]) { c[i]=t; nc(i); break; });
-			if(i==N_c) {
+			F(if(!A.f) { A.f=t; nc(a); break; });
+			if(a==N(c)) {
 				close(t);
 			}
 		}
-		F(if(c[i]&&FD_ISSET(c[i], &r)) { CK(t=read(c[i], h, 1)); if(t==0) { cl(i); } else if(*h=='\r') sl(i); else if(*h!='\n') strcat(b[i], h); } );
+		F(if(A.f&&FD_ISSET(A.f, &z)) { CK(t=read(A.f, h, 1)); if(t==0) { cl(a); } else if(*h=='\r') sl(a); else if(*h!='\n') strcat(A.b, h); } );
 	}
 	return 0;
 }
