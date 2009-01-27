@@ -34,7 +34,7 @@
 #define Z(p) memset(p, 0, sizeof *p) /* zero */
 sig_atomic_t tk_fl=1; /* tick timeout flag */
 enum {
-	rhand, lhand, head, body,
+	rhand, lhand, head, feet, body,
 };
 struct ii { /* item instance */
 	int v; /* vnum */
@@ -58,6 +58,10 @@ const struct { /* item definitions */
 } id[] = {
 	{{0}, "nothing"},
 	{{1}, "coonskin cap", head},
+	{{2}, "pair of rubber boots", feet},
+	{{3}, "hunting rifle", feet},
+	{{4}, "grannie panties", body},
+	{{5}, "rock"},
 };
 struct {
 	int p[N(dn)];
@@ -65,14 +69,14 @@ struct {
 	int e, s;
 	struct ii i[9]; /* inventory of the room */
 } r[] = {
-	{{-1,1,-1,4}, "A large grassy field."R"To the south is a gate, to the east is a parking lot."R, 2, 2, {{1}}},
+	{{-1,1,-1,4}, "A large grassy field."R"To the south is a gate, to the east is a parking lot."R, 2, 2, {{1},{3}}},
 	{{0,2,-1,-1}, "A large iron gate."R"To the north is a field, to the south is an ampitheater."R, 3, 3, },
 	{{1,-1,-1,3}, "An abandoned ampitheater."R"To the north is a gate, to the east is a ticket booth."R, 9, 1},
-	{{-1,-1,2,-1}, "Ticket booth."R"West exits to the ampitheater."R, 4, 0},
-	{{-1,1,0,-1}, "A anbandoned parking lot."R"To the west is a grassy field."R, 0, 0},
+	{{-1,-1,2,-1}, "Ticket booth."R"West exits to the ampitheater."R, 4, 0, {{4},{2}}},
+	{{-1,1,0,-1}, "A anbandoned parking lot."R"To the west is a grassy field."R, 0, 0, {{5}}},
 };
 void scrub(char *s) { /* remove control characters from a string */
-	while(*s) if(!isprint(*s)) *s='#';
+	for(;*s;s++) if(!isprint(*s)) *s='#';
 }
 void wr(int b, const char *s) {
 	if(B.f) CK(write(B.f, s, strlen(s)));
@@ -261,7 +265,7 @@ CM(c_a) {
 	if(*s) {
 		F(if(a!=b&&A.f&&A.r==B.r&&!strncmp(A.n, s, S(c->n))) { wr(b, "Name already used."R); KS; RET; } );
 
-		sta(b, -1, " is now known as %s."R, B.n);
+		sta(b, -1, " is now known as %s."R, s);
 		strcpy(B.n, s);
 		pr(b, "Your name is now \"%s\"."R, B.n);
 	}
@@ -334,9 +338,9 @@ CM(c_t) {
 			imv(B.i+d, B.i+lhand);
 		}
 		if(fr) {
-			imv(B.i+lhand, B.i+o);
 			pr(b, "You hold %s."R, Iname(B.i[o]));
 			sta(b, B.r, " holds %s."R, Iname(B.i[o]));
+			imv(B.i+lhand, B.i+o);
 		} else {
 			pr(b, "You pick up %s."R, Iname(Rb.i[o]));
 			sta(b, B.r, " picks up %s."R, Iname(Rb.i[o]));
