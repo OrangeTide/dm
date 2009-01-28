@@ -15,7 +15,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#define VER "0.5.3"
+#define VER "0.5.4"
 #define S(x) sizeof(x)
 #define N(x) (S(x)/S(*x))
 #define CK(s) if((s)<0) { perror(#s); exit(1); }
@@ -34,15 +34,31 @@
 #define AP(s,i,p) { strcpy(s+i,p); i+=strlen(p); } /* append */
 #define APand(s,i,f) AP(s, i, f>1?", ":f?" and ":" ")
 #define NH if(o<0) { wr(b, "That is not here."R); KS; RET; } /* test if not here */
+#define WEAR_ITEM(name, test) \
+	int o=ikw(N(B.i), B.i, s); \
+	if(o>=0) { \
+		int v=B.i[o].v, wl=id[v].wl; \
+		if((test)&&ist(b, wl)) { \
+			imv(B.i+wl, B.i+o); \
+			KS; \
+			RET; \
+		} \
+	} \
+	wr(b, o<0?"You don't have that."R:"You can't "name" that."R); \
+	KS;
+
 
 sig_atomic_t tk_fl=1; /* tick timeout flag */
 enum {
-	rhand, lhand, head, feet, body,
+	lhand, rhand, head, feet, body,
 };
 struct ii { /* item instance */
 	int v, /* vnum */
 		fl, /* flags: 0:immobile, 1:invisible */
 		a;
+};
+const char *ln[] = { /* wear location names */
+	"right hand", "left hand", "head", "feet", "body",
 };
 const char *dn[][9]={ /* direction name table and aliases */
 	{"north", "n"},
@@ -50,8 +66,8 @@ const char *dn[][9]={ /* direction name table and aliases */
 	{"west", "w"},
 	{"east", "e"}
 };
-struct {
-	int f, r, s; /* file descriptor, current room, state */
+struct { /* client structure */
+	int f, r, s, bo, im; /* file descriptor, current room, state, buffer offset, input mode */
 	char n[16], b[999]; /* name and buffer */
 	struct ii i[9]; /* inventory */
 } c[9];
@@ -63,9 +79,9 @@ const struct { /* item definitions */
 	{{0}, {"nothing"}},
 	{{1}, {"coonskin cap", "cap"}, head},
 	{{2}, {"pair of rubber boots", "rubber boots", "boots"}, feet},
-	{{3}, {"hunting rifle", "rifle"}, feet},
+	{{3}, {"hunting rifle", "rifle"}, rhand},
 	{{4}, {"grannie panties", "panties"}, body},
-	{{5}, {"fist sized rock", "rock"}},
+	{{5}, {"fist sized rock", "rock"}, rhand},
 	{{6, 3}, {"lever"}},
 };
 struct {
@@ -153,16 +169,32 @@ int idr(int b, struct ii *s) { /* drop item s to room that b is standing in */
 	imv(Rb.i+d, s);
 	RET 1;
 }
+int ist(int b, int d) { /* store into inventory */
+	if(B.i[d].v) { /* clear out the left hand */
+		int e=inf(N(B.i), B.i, body+1);
+		if(e<0) { /* inventory full */
+			wr(b, "Your inventory is full!"R);
+			if(!idr(b, B.i+d)) { /* drop it on the floor */
+				RET 0;
+			}
+		}
+		pr(b, "You put away %s."R, iname(B.i, d));
+		sta(b, B.r, " puts away %s."R, iname(B.i, d));
+		imv(B.i+e, B.i+d);
+	}
+	RET 1;
+}
 void inv(int a, int b) {
 	char n[99]="You are ";
 	int j, o, f, cnt;
 	if(a!=b) {
 		snprintf(n, S(n), "%s is ", B.n);
 	}
-	pr(a, "%sweilding %s.\n", n, iname(B.i, rhand));
+	pr(a, "%swielding %s.\n", n, iname(B.i, rhand));
 	pr(a, "%sholding %s.\n", n, iname(B.i, lhand));
-	pr(a, "%swearing %s on your head.\n", n, iname(B.i, head));
-	pr(a, "%swearing %s on your body.\n", n, iname(B.i, body));
+	for(j=head;j<=body;j++) {
+		pr(a, "%swearing %s on %s %s.\n", n, iname(B.i, j), a==b?"your":"his", ln[j]);
+	}
 
 	*tb=0;
 	o=0;
@@ -336,7 +368,7 @@ CM(c_ex) {
 	KS;
 }
 CM(c_t) {
-	int fr=0, d, o=ikw(N(Rb.i), Rb.i, s);
+	int fr=0, o=ikw(N(Rb.i), Rb.i, s);
 	if(o<0) { o=ikw(N(B.i), B.i, s); fr=1; }
 	NH;
 	if(!fr&&Rb.i[o].fl&1) {
@@ -349,16 +381,9 @@ CM(c_t) {
 		KS;
 		RET;
 	}
-	if(B.i[lhand].v) { /* clear out the left hand */
-		d=inf(N(B.i), B.i, body+1);
-		if(d<0) { /* inventory full */
-			wr(b, "Your inventory is full!"R);
-			KS;
-			RET;
-		}
-		pr(b, "You put away %s."R, iname(B.i, lhand));
-		sta(b, B.r, " puts away %s."R, iname(B.i, lhand));
-		imv(B.i+d, B.i+lhand);
+	if(!ist(b, lhand)) {
+		KS;
+		RET;
 	}
 	if(fr) {
 		pr(b, "You hold %s."R, iname(B.i, o));
@@ -377,6 +402,20 @@ CM(c_dr) { /* "drop" command */
 	if(!idr(b, B.i+o)) {
 		wr(b, "No space on the floor."R);
 	}
+	KS;
+}
+CM(c_wear) { WEAR_ITEM("wear", wl==body||wl==head||wl==feet); }
+CM(c_wield) { WEAR_ITEM("wield", wl==rhand); }
+CM(c_remove) {
+	int o=ikw(N(B.i), B.i, s);
+	if(o>=0) {
+		int v=B.i[o].v, wl=id[v].wl;
+		if(wl==o&&ist(b, wl)) {
+			KS;
+			RET;
+		}
+	}
+	wr(b, o<0?"You don't have that."R:"You can't remove that."R);
 	KS;
 }
 CM(c_i) {
@@ -413,6 +452,9 @@ const struct {
 	{{"inventory", "i"}, c_i},
 	{{"pull"}, c_pull},
 	{{"push"}, c_push},
+	{{"wear", "we"}, c_wear},
+	{{"wield", "wi"}, c_wield},
+	{{"remove", "r"}, c_remove},
 };
 CM(c_h) {
 	int i, j;
@@ -434,6 +476,7 @@ CM(c_h) {
 CH(sl) {
 	int i, j, l;
 	if(B.b[0]) {
+		/* printf("%d:input '%s'\n", b, B.b); */
 		if((i=ldn(B.b))>=0) {
 			go(b, i);
 			goto x;
@@ -453,7 +496,8 @@ CH(sl) {
 	}
 	KS;
 x:
-	B.b[0]=0;
+	B.b[B.bo=0]=0;
+	B.im=0;
 }
 CD(nc) {
 	Z(&B);
@@ -462,6 +506,54 @@ CD(nc) {
 	wr(b, "Welcome to Deathmatch!"R"*** version "VER" ***"R"Type 'help' for help."R);
 	wh(b);
 	c_l(b, "");
+}
+CM(in) { /* received a character */
+	unsigned char k=*s;
+	if(B.im) {
+		char rs[4]={'\377',0,k,0}; /* response buffer */
+		switch(B.im) {
+			case 1:
+				if(k==255) { AP(B.b, B.bo, s); B.im=0; } /* IAC IAC */
+				else if(k==254) B.im=2; /* IAC DONT */
+				else if(k==253) B.im=3; /* IAC DO */
+				else if(k==252) B.im=4; /* IAC WONT */
+				else if(k==251) B.im=5; /* IAC WILL */
+				else if(k==250) cl(b); /* IAC SB not supported */
+				else B.im=0; /* IAC x - printf("IAC %hhu\n", *s); */
+				break;
+			case 2: /* DONT */
+				/* printf("IAC DONT %hhu\n", *s); */
+				B.im=0;
+				break;
+			case 3: /* DO */
+				/* printf("IAC DO %hhu\n", *s); */
+				rs[1]='\374';
+				wr(b, rs);
+				B.im=0;
+				break;
+			case 4: /* WILL */
+				/* printf("IAC WONT %hhu\n", *s); */
+				B.im=0;
+				break;
+			case 5: /* WONT */
+				/* printf("IAC WILL %hhu\n", *s); */
+				rs[1]='\376';
+				wr(b, rs);
+				B.im=0;
+				break;
+		}
+	} else if(k==255) /* saw IAC */
+		B.im++;
+	else if((k=='\b'||k==127)&&B.bo)  /* backspace */
+		B.b[--B.bo]=0;
+	else if(k=='\r')
+		sl(b);
+	else if(k=='\n') {
+		if(B.bo) sl(b); /* HACK - handle LF only if the line is not empty */
+	} else if(B.bo+2>S(B.b))
+		cl(b); /* input buffer overflow */
+	else
+		AP(B.b, B.bo, s); /* append character to buffer*/
 }
 void sh_tk(int s) { tk_fl=1; } /* signal handler for ticks */
 int main(int ac, char **av) {
@@ -510,7 +602,7 @@ int main(int ac, char **av) {
 				close(t);
 			}
 		}
-		F(if(A.f&&FD_ISSET(A.f, &z)) { CK(t=read(A.f, h, 1)); if(t==0) { cl(a); } else if(*h=='\r') sl(a); else if(*h!='\n') strcat(A.b, h); } );
+		F(if(A.f&&FD_ISSET(A.f, &z)) { CK(t=read(A.f, h, 1)); if(t==0) cl(a); else in(a, h); } );
 	}
 	RET 0;
 }
