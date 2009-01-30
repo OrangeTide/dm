@@ -1,6 +1,6 @@
 /* dm.c - deathmatch
- * PUBLIC DOMAIN - Jon Mayo - January 29, 2009
- * a tiny unmaintanable telnet game
+ * PUBLIC DOMAIN - Jon Mayo - January 30, 2009
+ * a tiny unmaintainable telnet game
  */
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -15,12 +15,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#define VER "0.8"
+#define VER "0.8.1"
 #define S(x) sizeof(x)
 #define N(x) (S(x)/S(*x))
 #define CK(s) if((s)<0) { perror(#s); exit(1); }
 #define F(x) for(a=0;a<N(c);a++) { x; }
-#define MAX(a,b) (a)>(b)?(a):(b)
 #define CM(f) void f(int b, char *s)
 #define CH(f) void f(int b)
 #define CD(f) void f(int b, int d)
@@ -54,6 +53,7 @@
 		STA(b, r, " "n"s \"%s\"."R, s); \
 		KS; \
 	}
+#define MIN(a,b) (a)<(b)?(a):(b)
 sig_atomic_t tk_fl=1; /* tick timeout flag */
 enum {
 	lhand, rhand, head, feet, body,
@@ -93,7 +93,7 @@ const struct { /* item definitions */
 	char *n[9];
 	int wl, /* wear location */
 		s[N(c->s)], /* stat modifiers */
-		hp; /* hitpoint modifiers */
+		hp; /* hit point modifiers */
 } id[] = {
 	{{0}, {"nothing"}},
 	{{1}, {"coonskin cap", "cap"}, head, {0, 1}},
@@ -114,10 +114,10 @@ struct {
 } r[] = {
 	{{0},"Empty void"},
 	{{0,2,0,5}, "A large grassy field."R"To the south is a gate, to the east is a parking lot.", {{1},{3}}, 2, 2},
-	{{1,3}, "A large iron gate."R"To the north is a field, to the south is an ampitheater.", {}, 3, 3, },
-	{{2,0,4}, "An abandoned ampitheater. There is a large lever near the wall."R"To the north is a gate, to the west is a ticket booth.", {{6, 3}}, 9, 1},
-	{{0,0,0,3}, "Ticket booth."R"East exits to the ampitheater.", {{4},{2}, {8}, {8}, {8}}, 4 },
-	{{0,0,1}, "A anbandoned parking lot."R"To the west is a grassy field.", {{5},{7}}},
+	{{1,3}, "A large iron gate."R"To the north is a field, to the south is an amphitheater.", {}, 3, 3, },
+	{{2,0,4}, "An abandoned amphitheater. There is a large lever near the wall."R"To the north is a gate, to the west is a ticket booth.", {{6, 3}}, 9, 1},
+	{{0,0,0,3}, "Ticket booth."R"East exits to the amphitheater.", {{4},{2}, {8}, {8}, {8}}, 4 },
+	{{0,0,1}, "A abandoned parking lot."R"To the west is a grassy field.", {{5},{7}}},
 };
 char tb[999]; /* temporary buffer */
 void scrub(char *s) { /* remove control characters from a string */
@@ -165,7 +165,7 @@ char *iname(struct ii *ii, int o) {
 	}
 	RET b;
 }
-int ikw(int n, struct ii *ii, const char *k) { /* find firt keyword match */
+int ikw(int n, struct ii *ii, const char *k) { /* find first keyword match */
 	int i, j;
 	/* TODO: deal with priorities of keywords */
 	for(i=0;i<n;i++) {
@@ -210,7 +210,7 @@ int idr(int b, struct ii *s) { /* drop item s to room that b is standing in */
 	imv(Rb.i+d, s);
 	RET 1;
 }
-int ckw(int b, int room, const char *s) { /* find firt character in room with name */
+int ckw(int b, int room, const char *s) { /* find first character in room with name */
 	int a;
 	F(if(A.f&&A.r==room&&!strcasecmp(s, A.n)) { RET a; });
 	wr(b, "I don't see that here."R);
@@ -292,6 +292,9 @@ CH(cl) {
 		}
 	}
 }
+CD(hpadd) {
+	B.hp=MIN(B.hp+d, B.s[hpmax]*D);
+}
 CD(ss) {
 	B.state=d;
 	if(d==0) {
@@ -363,7 +366,7 @@ CM(c_name) {
 	if(strlen(s)>=S(c->n)) s[S(c->n)-1]=0;
 	for(p=s;*p;p++) if(!isalnum(*p)) *p='_';
 	if(*s) {
-		F(if(a!=b&&A.f&&A.r==B.r&&!strncmp(A.n, s, S(c->n))) { wr(b, "Name already used."R); KS; RET; } );
+		F(if(a!=b&&A.f&&A.r==B.r&&!strcasecmp(A.n, s)) { wr(b, "Name already used."R); KS; RET; } );
 
 		STA(b, -1, " is now known as %s."R, s);
 		strcpy(B.n, s);
@@ -592,7 +595,7 @@ CM(c_eat) {
 	if(o>=0) {
 			pr(b, "You eat %s."R, iname(B.i, o));
 			STA(b, B.r, " eats %s."R, iname(B.i, o));
-			B.hp=MAX(B.hp+id[B.i[o].v].hp, B.s[hpmax]);
+			hpadd(b, id[B.i[o].v].hp);
 			B.i[o].v=0; /* deleted */
 			RET; KS;
 	} else
@@ -654,7 +657,7 @@ CH(sl) {
 		}
 		if(ispunct(*B.b)) {
 			*tmp=*B.b;
-			p=tmp;
+			p=tmp+1;
 		} else {
 			l=strcspn(B.b," ");
 			if(B.b[l]) B.b[l++]=0;
@@ -745,15 +748,16 @@ int cmp_ir(const void *p, const void *q) { /* compare initiative rolls */
 }
 void combat(void) {
 	int l[N(c)]; /* client list */
-	int a, b, d, i, n=0, nhp;
+	int a, b, d, i, n=0, ohp;
 	F(if(A.f) { l[n++]=a; A.ir=roll(A.s[ini]); }); /* calculate initiative */
 	qsort(l, n, S(*l), cmp_ir); /* sort based on initiatives */
 	/* apply combat */
 	for(i=0;i<n;i++) {
 		a=l[i]; /* a:attacker b:defender */
-		nhp=roll(A.s[rec])/D;
-		if(nhp) {
-			A.hp=MAX(A.hp+nhp, A.s[hpmax]); /* recover hitpoints */
+		ohp=A.hp;
+		/* recover hit points */
+		hpadd(a, roll(A.s[rec])/D);
+		if(ohp!=A.hp) {
 			wr(a, R); /* cause prompt update */
 		}
 		if((b=A.t)>=0) {
