@@ -56,7 +56,6 @@
 		STA(b, r, " "n"s \"%s\"."R, s); \
 		KS; \
 	}
-#define MIN(a,b) (a)<(b)?(a):(b)
 #define LIST_TAB(b, tb, e) /* list a table of strings and aliases */ \
 	for(i=0;i<N(tb);i++) { \
 		wr(b, "-"); \
@@ -147,7 +146,7 @@ struct {
 	{{1,3}, "A large iron gate."R"To the north is a field, to the south is an amphitheater.", {{2}}, 3, 3, },
 	{{2,0,4}, "An abandoned amphitheater. There is a large lever near the wall."R"To the north is a gate, to the west is a ticket booth.", {{6, 3},{3}}, 9, 1},
 	{{0,0,0,3}, "Ticket booth."R"East exits to the amphitheater.", {{4},{2}, {8}, {8}, {8}}, 4 },
-	{{0,0,1}, "A abandoned parking lot."R"To the west is a grassy field.", {{5},{7}}},
+	{{0,0,1}, "An abandoned parking lot."R"To the west is a grassy field.", {{5},{7}}},
 };
 
 struct { /* high score list */
@@ -205,12 +204,12 @@ int ldn(const char *s) {
 	RET -1;
 }
 
-void s_add(int b, int *s) { /* apply stats */
+void s_add(int b, const int *s) { /* apply stats */
 	int i;
 	for(i=0;i<N(B.s);i++) B.s[i]+=s[i];
 }
 
-void s_rem(int b, int *s) { /* remove stats */
+void s_rem(int b, const int *s) { /* remove stats */
 	int i;
 	for(i=0;i<N(B.s);i++) B.s[i]-=s[i];
 }
@@ -401,7 +400,7 @@ CH(cl) {
 }
 
 CD(hpadd) {
-	B.hp=MIN(B.hp+d, B.s[hpmax]*D);
+	B.hp=B.hp+d<B.s[hpmax]*d?B.hp+d:B.s[hpmax]*D;
 }
 
 CD(ss) {
@@ -775,7 +774,7 @@ CM(c_h) {
 	KS;
 }
 
-CH(sl) {
+CH(sl) { /* send line - called when there is new line data */
 	char *p=B.b, *q=p, tmp[2]={0};
 	int i, j;
 	if(*q) {
