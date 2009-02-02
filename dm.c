@@ -1,5 +1,5 @@
 /* dm.c - deathmatch
- * PUBLIC DOMAIN - Jon Mayo - January 30, 2009
+ * PUBLIC DOMAIN - Jon Mayo - February 2, 2009
  * a tiny unmaintainable telnet game
  */
 
@@ -18,7 +18,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#define VER "0.8.2"
+#define VER "0.8.3"
 #define S(x) sizeof(x)
 #define N(x) (S(x)/S(*x))
 #define CK(s) if((s)<0) { perror(#s); abort(); }
@@ -34,19 +34,19 @@
 #define Rb r[pc[b].r]
 #define RET return
 #define Z(p) memset(p, 0, sizeof *p) /* zero */
-#define AP(s,i,p) { strcpy(s+i,p); i+=strlen(p); } /* append */
-#define APand(s,i,f) AP(s, i, f>1?", ":f?" and ":" ")
+#define AP(s,p) { strcpy(s+s##o,p); s##o+=strlen(p); } /* append */
+#define APand(s,f) AP(s, f>1?", ":f?" and ":" ")
 #define NH if(o<0) { wr(b, "That is not here."R); KS; RET; } /* test if not here */
 #define LIST_ITEMS(inv, st, vis) \
 		for(f=n,j=st;j<N(inv);j++) { \
 			if(inv[j].v&&vis) { /* exists and is visible */ \
 				f--; \
-				AP(tb, o, iname(inv, j)); \
-				APand(tb, o, f); \
+				AP(tb, iname(inv, j)); \
+				APand(tb, f); \
 			} \
 		}
 #define LIST_PCS(cond) \
-		F(if(A.f&&(cond)) { f--; AP(tb, o, A.n); APand(tb, o, f); })
+		F(if(A.f&&(cond)) { f--; AP(tb, A.n); APand(tb, f); })
 #define D 6 /* number of sides for rolling dice */
 #define STA(b, r, f, s...) bc(b, r, "%s" f, B.n, ## s) /* GNU extensions */
 #define C_S(f, n, r) \
@@ -157,6 +157,7 @@ struct { /* high score list */
 };
 
 char tb[999]; /* temporary buffer */
+int tbo; /* temporary buffer offset */
 
 /** FUNCTIONS **/
 void cln(char *s) { /* clean control characters from a string */
@@ -315,7 +316,7 @@ int ist(int b, int d) { /* store into inventory */
 
 void inv(int a, int b) {
 	char x[99]="You are ";
-	int j, o, f, n;
+	int j, f, n;
 	if(a!=b) {
 		snprintf(x, S(x), "%s is ", B.n);
 	}
@@ -325,14 +326,14 @@ void inv(int a, int b) {
 		pr(a, "%s%sing %s on %s %s.\n", x, wv(j), iname(B.i, j), a==b?"your":"his", ln[j]);
 	}
 
-	*tb=o=0;
-	if(a!=b) { AP(tb, o, B.n); AP(tb, o, "'s"); } else AP(tb, o, "Your");
-	AP(tb, o, " pack contains ");
+	*tb=tbo=0;
+	if(a!=b) { AP(tb, B.n); AP(tb, "'s"); } else AP(tb, "Your");
+	AP(tb, " pack contains ");
 	for(n=0,j=body+1;j<N(B.i);j++) if(B.i[j].v) n++;
 	LIST_ITEMS(B.i, body+1, 1);
-	if(n) o--;
-	AP(tb, o, n?".":*id->n);
-	AP(tb, o, R);
+	if(n) tbo--;
+	AP(tb, n?".":*id->n);
+	AP(tb, R);
 	wr(a, tb);
 }
 
@@ -417,22 +418,23 @@ CM(c_q) { /* "quit" command */
 }
 
 CM(lr) { /* look into room */
-	int a, f, j, o=0, n;
+	int a, f, j, n;
 	/* room description */
 	pr(b, "%s"R, Rb.d);
 	/* check for items on the floor */
+	tbo=0;
 	for(n=0,j=0;j<N(Rb.i);j++) if(Rb.i[j].v&&~Rb.i[j].fl&2) n++;
 	if(n) {
 		LIST_ITEMS(Rb.i, 0, ~Rb.i[j].fl&2);
-		strcpy(tb+o, n==1?"is laying here."R:"are laying here."R);
+		strcpy(tb+tbo, n==1?"is laying here."R:"are laying here."R);
 		wr(b, tb);
 	}
 	/* check for players */
-	*tb=o=n=0;
+	*tb=tbo=n=0;
 	F(if(a!=b&&A.f&&A.r==B.r) { n++; });
 	if((f=n)) {
 		LIST_PCS(a!=b&&A.r==B.r)
-		AP(tb, o, n==1?"is standing here."R:"are standing here."R);
+		AP(tb, n==1?"is standing here."R:"are standing here."R);
 		wr(b, tb);
 	}
 }
@@ -701,7 +703,7 @@ CM(c_fl) { /* "flee" command */
 }
 
 CM(c_br) { /* "brawls" command - show all active brawls */
-	int a, j, o, f, n, k=1;
+	int a, j, f, n, k=1;
 	for(j=0;j<N(r);j++) {
 		if(r[j].br) {
 			if(k) {
@@ -710,10 +712,10 @@ CM(c_br) { /* "brawls" command - show all active brawls */
 			}
 			n=0;
 			F(if(A.f&&BI(r[j].br, a)) { n++; });
-			o=sprintf(tb, "Room #%-3u : ", j);
+			tbo=sprintf(tb, "Room #%-3u : ", j);
 			if((f=n)) {
 				LIST_PCS(BI(r[j].br, a));
-				AP(tb, o, "are fighting."R);
+				AP(tb, "are fighting."R);
 				wr(b, tb);
 			}
 		}
@@ -831,7 +833,7 @@ CM(in) { /* received a character */
 		char rs[4]={'\377',0,k,0}; /* response buffer */
 		switch(B.im) {
 			case 1:
-				if(k==255) { AP(B.b, B.bo, s); B.im=0; } /* IAC IAC */
+				if(k==255) { AP(B.b, s); B.im=0; } /* IAC IAC */
 				else if(k==254) B.im=2; /* IAC DONT */
 				else if(k==253) B.im=3; /* IAC DO */
 				else if(k==252) B.im=4; /* IAC WONT */
@@ -871,7 +873,7 @@ CM(in) { /* received a character */
 	} else if(B.bo+2>S(B.b))
 		cl(b); /* input buffer overflow */
 	else
-		AP(B.b, B.bo, s); /* append character to buffer*/
+		AP(B.b, s); /* append character to buffer*/
 }
 
 int cmp_ir(const void *p, const void *q) { /* compare initiative rolls */
