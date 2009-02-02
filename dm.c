@@ -37,11 +37,12 @@
 #define AP(s,p) { strcpy(s+s##o,p); s##o+=strlen(p); } /* append */
 #define APand(s,f) AP(s, f>1?", ":f?" and ":" ")
 #define NH if(o<0) { wr(b, "That is not here."R); KS; RET; } /* test if not here */
+#define INM(ii,o) *id[ii[o].v].n /* get the name of an item from the id[] table */
 #define LIST_ITEMS(inv, st, vis) \
 		for(f=n,j=st;j<N(inv);j++) { \
 			if(inv[j].v&&vis) { /* exists and is visible */ \
 				f--; \
-				AP(tb, iname(inv, j)); \
+				AP(tb, INM(inv, j)); \
 				APand(tb, f); \
 			} \
 		}
@@ -110,7 +111,7 @@ struct { /* client structure */
 		hp, xp, t; /* current hit points, experience points, target */
 	char n[16], b[999], /* name and buffer */
 		s[N(sn)]; /* stats: hit, def, evade, dex, hpmax, ini, ... */
-	struct ii i[9]; /* inventory */
+	struct ii i[7]; /* inventory */
 } pc[16]; /* there is only room in the r.br for int bits of PCs */
 
 const struct { /* item definitions */
@@ -121,15 +122,15 @@ const struct { /* item definitions */
 		hp; /* hit point modifiers */
 } id[] = {
 	{{0}, {"nothing"}},
-	{{1}, {"coonskin cap", "cap"}, head, {0, 1}},
-	{{2}, {"pair of rubber boots", "rubber boots", "boots"}, feet, {0, 1, -1}},
-	{{3}, {"hunting rifle", "rifle"}, rhand, {3}},
+	{{1}, {"a coonskin cap", "cap"}, head, {0, 1}},
+	{{2}, {"a pair of rubber boots", "rubber boots", "boots"}, feet, {0, 1, -1}},
+	{{3}, {"a hunting rifle", "rifle"}, rhand, {3}},
 	{{4}, {"grannie panties", "panties"}, body, {0, 1}},
-	{{5}, {"fist sized rock", "rock"}, rhand, {1}},
-	{{6, 3}, {"lever"}},
-	{{7}, {"pair of running shoes", "running shoes", "shoes"}, feet, {0, 0, 2}},
-	{{8}, {"half eaten slice of pizza", "slice of pizza", "pizza"}, 0, {}, 40},
-	{{9}, {"golf club", "club"}, rhand, {2}},
+	{{5}, {"a fist sized rock", "rock"}, rhand, {1}},
+	{{6, 3}, {"a lever"}},
+	{{7}, {"a pair of running shoes", "running shoes", "shoes"}, feet, {0, 0, 2}},
+	{{8}, {"a half eaten slice of pizza", "slice of pizza", "pizza"}, 0, {}, 40},
+	{{9}, {"a golf club", "club"}, rhand, {2}},
 };
 
 struct {
@@ -231,28 +232,29 @@ void rw(void) { /* reset world */
 	}
 }
 
-char *iname(struct ii *ii, int o) {
-	static char b[99];
-	char *s=*id[ii[o].v].n;
-	if(ii[o].v) {
-		snprintf(b, S(b), "%s %s", strchr("aeiou", *s)?"an":"a", s);
-	} else {
-		strcpy(b, *id->n);
-	}
-	RET b;
-}
-
 char *wv(int wl) { /* wear location verbs */
 	RET wl==rhand?"wield":wl==lhand?"hold":"wear";
+}
+
+const char *sa(const char *s) { /* strip article from string */
+	const char *a[]={"a ", "an ", "the "};
+	int i, l;
+	for(i=0;i<N(a);i++) {
+		if(!strncasecmp(s, a[i], l=strlen(a[i]))) {
+			return s+l;
+		}
+	}
+	return s;
 }
 
 int ikw(int n, struct ii *ii, const char *k) { /* find first keyword match */
 	int i, j;
 	/* TODO: deal with priorities of keyword aliases */
+	k=sa(k);
 	for(i=0;i<n;i++) {
 		char **s=id[ii[i].v].n;
 		for(j=0;s[j];j++) {
-			if(ii[i].v&&!strcasecmp(s[j], k)) return i;
+			if(ii[i].v&&!strcasecmp(sa(s[j]), k)) return i;
 		}
 	}
 	return -1;
@@ -278,8 +280,8 @@ int idr(int b, int d) { /* drop item s to room that b is standing in */
 		wr(b, "No room on the floor."R);
 		RET 0;
 	}
-	pr(b, "You drop %s."R, iname(B.i, d));
-	STA(b, B.r, " drops %s."R, iname(B.i, d));
+	pr(b, "You drop %s."R, INM(B.i, d));
+	STA(b, B.r, " drops %s."R, INM(B.i, d));
 	if(id[B.i[d].v].wl==d&&d<=body) {
 		s_rem(b, id[B.i[d].v].s);
 	}
@@ -304,8 +306,8 @@ int ist(int b, int d) { /* store into inventory */
 			}
 			RET 1;
 		}
-		pr(b, "You put away %s."R, iname(B.i, d));
-		STA(b, B.r, " puts away %s."R, iname(B.i, d));
+		pr(b, "You put away %s."R, INM(B.i, d));
+		STA(b, B.r, " puts away %s."R, INM(B.i, d));
 		if(id[B.i[d].v].wl==d&&d<=body) {
 			s_rem(b, id[B.i[d].v].s);
 		}
@@ -320,10 +322,10 @@ void inv(int a, int b) {
 	if(a!=b) {
 		snprintf(x, S(x), "%s is ", B.n);
 	}
-	pr(a, "%swielding %s.\n", x, iname(B.i, rhand));
-	pr(a, "%sholding %s.\n", x, iname(B.i, lhand));
+	pr(a, "%swielding %s.\n", x, INM(B.i, rhand));
+	pr(a, "%sholding %s.\n", x, INM(B.i, lhand));
 	for(j=head;j<=body;j++) {
-		pr(a, "%s%sing %s on %s %s.\n", x, wv(j), iname(B.i, j), a==b?"your":"his", ln[j]);
+		pr(a, "%s%sing %s on %s %s.\n", x, wv(j), INM(B.i, j), a==b?"your":"his", ln[j]);
 	}
 
 	*tb=tbo=0;
@@ -560,7 +562,7 @@ CM(c_t) { /* "take" command */
 		RET;
 	}
 	if(fr&&o==lhand) {
-		pr(b, "You are already holding %s."R, iname(B.i, lhand));
+		pr(b, "You are already holding %s."R, INM(B.i, lhand));
 		KS;
 		RET;
 	}
@@ -569,12 +571,12 @@ CM(c_t) { /* "take" command */
 		RET;
 	}
 	if(fr) {
-		pr(b, "You hold %s."R, iname(B.i, o));
-		STA(b, B.r, " holds %s."R, iname(B.i, o));
+		pr(b, "You hold %s."R, INM(B.i, o));
+		STA(b, B.r, " holds %s."R, INM(B.i, o));
 		imv(B.i+lhand, B.i+o);
 	} else {
-		pr(b, "You pick up %s."R, iname(Rb.i, o));
-		STA(b, B.r, " picks up %s."R, iname(Rb.i, o));
+		pr(b, "You pick up %s."R, INM(Rb.i, o));
+		STA(b, B.r, " picks up %s."R, INM(Rb.i, o));
 		imv(B.i+lhand, Rb.i+o);
 	}
 	KS;
@@ -598,8 +600,8 @@ CM(c_eq) { /* "equip" command (aka wear) */
 			KS; RET;
 		} else if((wl>lhand&&wl<=body)&&ist(b, wl)) {
 			imv(B.i+wl, B.i+o);
-			pr(b, "You %s %s."R, wv(wl), iname(B.i, wl));
-			STA(b, B.r, " %ss %s."R, wv(wl), iname(B.i, wl));
+			pr(b, "You %s %s."R, wv(wl), INM(B.i, wl));
+			STA(b, B.r, " %ss %s."R, wv(wl), INM(B.i, wl));
 			s_add(b, id[v].s);
 			KS; RET;
 		}
@@ -629,7 +631,7 @@ CM(c_i) { /* "inventory" command */
 CM(c_pull) { /* "pull" command */
 	int o=ikw(N(Rb.i), Rb.i, s);
 	NH; /* Not here? */
-	pr(b, "You pull %s."R, iname(Rb.i, o));
+	pr(b, "You pull %s."R, INM(Rb.i, o));
 	/* TODO: activate item's handler - door lock, etc. */
 	KS;
 }
@@ -637,7 +639,7 @@ CM(c_pull) { /* "pull" command */
 CM(c_push) { /* "push" command */
 	int o=ikw(N(Rb.i), Rb.i, s);
 	NH; /* Not here? */
-	pr(b, "You push %s."R, iname(Rb.i, o));
+	pr(b, "You push %s."R, INM(Rb.i, o));
 	/* TODO: activate item's handler - soda machine, etc */
 	KS;
 }
@@ -728,8 +730,8 @@ CM(c_br) { /* "brawls" command - show all active brawls */
 CM(c_eat) { /* "eat" command */
 	int o=ikw(N(B.i), B.i, s);
 	if(o>=0) {
-			pr(b, "You eat %s."R, iname(B.i, o));
-			STA(b, B.r, " eats %s."R, iname(B.i, o));
+			pr(b, "You eat %s."R, INM(B.i, o));
+			STA(b, B.r, " eats %s."R, INM(B.i, o));
 			hpadd(b, id[B.i[o].v].hp);
 			B.i[o].v=0; /* deleted */
 			RET; KS;
@@ -824,6 +826,7 @@ CD(nc) {
 	"Try 'help' for commands."R R);
 	wh(b);
 	c_l(b, "");
+	memcpy(B.i, &id[rand()%N(id)].i, S(*B.i)); /* give player a random item */
 	STA(b, B.r, " enters."R);
 }
 
@@ -969,7 +972,6 @@ int main(int ac, char **av) {
 				perror("accept()");
 				continue;
 			}
-			printf("Accept!\n");
 			if(tk_fl<1) {
 				puts("active."); /* we are now awake */
 				rw(); /* reset world on waking up */
