@@ -404,7 +404,7 @@ CH(cl) {
 }
 
 CD(hpadd) {
-	B.hp=B.hp+d<B.s[hpmax]*d?B.hp+d:B.s[hpmax]*D;
+	B.hp=B.hp+d<B.s[hpmax]*D?B.hp+d:B.s[hpmax]*D;
 }
 
 CD(ss) {
