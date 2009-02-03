@@ -78,7 +78,7 @@ struct ii { /* item instance */
 };
 
 enum {
-	hit, def, rec, evade, hpmax, ini
+	hit, def, rec, ini, hpmax, evade,
 };
 
 /** PROTOTYPES **/
@@ -122,15 +122,16 @@ const struct { /* item definitions */
 		hp; /* hit point modifiers */
 } id[] = {
 	{{0}, {"nothing"}},
-	{{1}, {"a coonskin cap", "cap"}, head, {0, 1}},
-	{{2}, {"a pair of rubber boots", "rubber boots", "boots"}, feet, {0, 1, -1}},
+	{{1}, {"a coonskin cap", "cap"}, head, {0, 1, 0, 1}},
+	{{2}, {"a pair of rubber boots", "rubber boots", "boots"}, feet, {0, 1, 0, -1}},
 	{{3}, {"a hunting rifle", "rifle"}, rhand, {3}},
-	{{4}, {"grannie panties", "panties"}, body, {0, 1}},
+	{{4}, {"grannie panties", "panties"}, body, {0, 1, -1}},
 	{{5}, {"a fist sized rock", "rock"}, rhand, {1}},
-	{{6, 3}, {"a lever"}},
-	{{7}, {"a pair of running shoes", "running shoes", "shoes"}, feet, {0, 0, 2}},
+	{{6, 3}, {"a lever"}, rhand, {4}},
+	{{7}, {"a pair of running shoes", "running shoes", "shoes"}, feet, {0, 0, 2, 1}},
 	{{8}, {"a half eaten slice of pizza", "slice of pizza", "pizza"}, 0, {}, 40},
 	{{9}, {"a golf club", "club"}, rhand, {2}},
+	{{10}, {"a viking helmet", "helmet"}, head, {0, 2, -1}},
 };
 
 struct {
@@ -826,7 +827,7 @@ CD(nc) {
 	"Try 'help' for commands."R R);
 	wh(b);
 	c_l(b, "");
-	memcpy(B.i, &id[rand()%N(id)].i, S(*B.i)); /* give player a random item */
+	B.i[body+1]=id[rand()%N(id)].i; /* give player a random item */
 	STA(b, B.r, " enters."R);
 }
 
@@ -935,7 +936,7 @@ int main(int ac, char **av) {
 	CK(s=socket(PF_INET, SOCK_STREAM, 0));
 	Z(&x);
 	x.sin_port=htons(ac>1?atoi(av[1]):5555);
-	CK(bind(s, (struct sockaddr*)&x, S(x)));
+	CK(bind(s, &x, S(x)));
 	CK(listen(s,1));
 	CK(fcntl(s, F_SETFL, O_NONBLOCK)); /* accept() will block sometimes */
 	for(;;) {
@@ -967,7 +968,7 @@ int main(int ac, char **av) {
 		}
 		if(FD_ISSET(s, &z)) {
 			l=S(x);
-			t=accept(s, (struct sockaddr*)&x, &l);
+			t=accept(s, &x, &l);
 			if(t<0) {
 				perror("accept()");
 				continue;
