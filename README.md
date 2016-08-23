@@ -25,10 +25,12 @@ Features
  * basic TELNET processing including IAC DO DONT WILL WONT.
  * travel in six possible directions: north, south, east, west, up, down.
  * six basic player stats: hit, def, rec, ini, hpmax, evade.
- * five hard coded rooms!
- * eight items for increased attack and defense.
+ * loads rooms and items from a data file
+ * eight items for increased attack, defense and healing.
  * five wear locations: r.hand, l.hand, head, feet, body.
  * unbalanced combat system where sniper rifle dominates the server.
  * over 20 possible commands.
 
-
+Bugs
+----
+ * none reported.

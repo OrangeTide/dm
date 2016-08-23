@@ -3,7 +3,6 @@
  * a tiny unmaintainable telnet game
  */
 
-/** MACROS **/
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
@@ -18,8 +17,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#define VER "0.8.3"
-#define S(x) sizeof(x)
+#define VER "0.9.0"
+#define S(x) (int)sizeof(x)
 #define N(x) (S(x)/S(*x))
 #define CK(s) if((s)<0) { perror(#s); abort(); }
 #define F(x) for(a=0;a<N(pc);a++) { x; }
@@ -27,7 +26,7 @@
 #define CH(f) void f(int b)
 #define CD(f) void f(int b, int d)
 #define R "\r\n"
-#define KS ss(b, B.state);
+#define KS ss(b, B.state)
 #define BI(x,d) (((x)>>d)&1)
 #define B pc[b]
 #define A pc[a]
@@ -50,7 +49,7 @@
 		F(if(A.f&&(cond)) { f--; AP(tb, A.n); APand(tb, f); })
 #define D 6 /* number of sides for rolling dice */
 #define STA(b, r, f, s...) bc(b, r, "%s" f, B.n, ## s) /* GNU extensions */
-#define C_S(f, n, r) \
+#define C_S(f, n, r) /* generic emote template */ \
 	CM(f) { \
 		cln(s); \
 		pr(b, "You "n" \"%s\"."R, s); \
@@ -66,9 +65,8 @@
 		wr(b, R); \
 	}
 
-/** TYPES **/
 enum {
-	lhand, rhand, head, feet, body,
+	none, lhand, rhand, head, feet, body,
 };
 
 struct ii { /* item instance */
@@ -81,22 +79,15 @@ enum {
 	hit, def, rec, ini, hpmax, evade,
 };
 
-/** PROTOTYPES **/
-CM(c_h); /* "help" command */
-CH(cl); /* close a connection */
+CM(c_h);
+CH(cl);
 
-/** GLOBALS **/
 sig_atomic_t tk_fl; /* tick timeout flag, 0=sleeping 1=waiting 2=newtick */
 
-const char *ln[] = { /* wear location names */
-	"right hand", "left hand", "head", "feet", "body",
-};
-
-const char *sn[] = {
-	"Hit", "Defense", "Recovery", "Evade", "Max HP", "Ini"
-};
-
-const char *dn[][9]={ /* direction name table and aliases(8 max) */
+const char *
+ln[] = { /* wear location names */ "N/A", "right hand", "left hand", "head", "feet", "body", },
+*sn[] = { "Hit", "Defense", "Recovery", "Evade", "Max HP", "Ini" },
+*dn[][9]={ /* direction name table and aliases(8 max) */
 	{"north", "n"},
 	{"south", "s"},
 	{"west", "w"},
@@ -114,42 +105,23 @@ struct { /* client structure */
 	struct ii i[7]; /* inventory */
 } pc[16]; /* there is only room in the r.br for int bits of PCs */
 
-const struct { /* item definitions */
+struct item { /* item definitions */
 	struct ii i; /* initial instance data */
 	char *n[9];
 	int wl, /* wear location */
 		s[N(pc->s)], /* stat modifiers */
 		hp; /* hit point modifiers */
-} id[] = {
-	{{0}, {"nothing"}},
-	{{1}, {"a coonskin cap", "cap"}, head, {0, 1, 0, 1}},
-	{{2}, {"a pair of rubber boots", "rubber boots", "boots"}, feet, {0, 1, 0, -1}},
-	{{3}, {"a hunting rifle", "rifle"}, rhand, {3}},
-	{{4}, {"grannie panties", "panties"}, body, {0, 1, -1}},
-	{{5}, {"a fist sized rock", "rock"}, rhand, {1}},
-	{{6, 3}, {"a lever"}, rhand, {4}},
-	{{7}, {"a pair of running shoes", "running shoes", "shoes"}, feet, {0, 0, 2, 1}},
-	{{8}, {"a half eaten slice of pizza", "slice of pizza", "pizza"}, 0, {}, 40},
-	{{9}, {"a golf club", "club"}, rhand, {2}},
-	{{10}, {"a viking helmet", "helmet"}, head, {0, 2, -1}},
-};
+} id[99];
 
-struct {
-	const int p[N(dn)];
+struct room {
+	int p[N(dn)]; /* portal (exits) */
 	const char *d;
-	const struct ii ri[9]; /* inventory of the room for  reset - must not be larger than i[] */
-	const unsigned re, rs; /* reset initial state - exit-that-are-doors: EWSN; door state: EWSN; */
+	struct ii ri[9]; /* inventory of the room for  reset - must not be larger than i[] */
+	unsigned re, rs; /* reset initial state - exit-that-are-doors: EWSN; door state: EWSN; */
 	struct ii i[99]; /* current inventory of the room */
 	unsigned e, s, /* exit-that-are-doors: EWSN; door state: EWSN; */
 		br; /* 1 bit for each participant in a brawl */
-} r[] = {
-	{{0},"Empty void"},
-	{{0,2,0,5}, "A large grassy field."R"To the south is a gate, to the east is a parking lot.", {{1},{8},{9}}, 2, 2},
-	{{1,3}, "A large iron gate."R"To the north is a field, to the south is an amphitheater.", {{2}}, 3, 3, },
-	{{2,0,4}, "An abandoned amphitheater. There is a large lever near the wall."R"To the north is a gate, to the west is a ticket booth.", {{6, 3},{3}}, 9, 1},
-	{{0,0,0,3}, "Ticket booth."R"East exits to the amphitheater.", {{4},{2}, {8}, {8}, {8}}, 4 },
-	{{0,0,1}, "An abandoned parking lot."R"To the west is a grassy field.", {{5},{7}}},
-};
+} r[99];
 
 struct { /* high score list */
 	int xp;
@@ -161,7 +133,10 @@ struct { /* high score list */
 char tb[999]; /* temporary buffer */
 int tbo; /* temporary buffer offset */
 
-/** FUNCTIONS **/
+void escape(char *n) { /* turns \n into CR LF */
+	while(*n)if(n[0]=='\\'&&n[1]=='n')n[0]='\r',n[1]='\n',n+=2;else n++;
+}
+
 void cln(char *s) { /* clean control characters from a string */
 	for(;*s;s++) if(!isprint(*s)) *s='#';
 }
@@ -242,10 +217,10 @@ const char *sa(const char *s) { /* strip article from string */
 	int i, l;
 	for(i=0;i<N(a);i++) {
 		if(!strncasecmp(s, a[i], l=strlen(a[i]))) {
-			return s+l;
+			RET s+l;
 		}
 	}
-	return s;
+	RET s;
 }
 
 int ikw(int n, struct ii *ii, const char *k) { /* find first keyword match */
@@ -255,18 +230,18 @@ int ikw(int n, struct ii *ii, const char *k) { /* find first keyword match */
 	for(i=0;i<n;i++) {
 		char **s=id[ii[i].v].n;
 		for(j=0;s[j];j++) {
-			if(ii[i].v&&!strcasecmp(sa(s[j]), k)) return i;
+			if(ii[i].v&&!strcasecmp(sa(s[j]), k)) RET i;
 		}
 	}
-	return -1;
+	RET -1;
 }
 
 int ifree(int n, struct ii *ii, int skip) { /* return next free inventory slot */
 	int i;
 	for(i=skip;i<n;i++) {
-		if(!ii[i].v) return i;
+		if(!ii[i].v) RET i;
 	}
-	return -1;
+	RET -1;
 }
 
 void imv(struct ii *d, struct ii *s) { /* move inventory item from s to d */
@@ -371,7 +346,7 @@ CH(stop_brawl) {
 	}
 	/* search for anyone else who is attacking you,
 	 * also stop the brawl if they're the only one left in it. */
-	F(if(A.t==b) { r[A.r].br&=~(1<<b); A.t=-1; if(!(r[A.r].br&~(1<<a))) r[A.r].br=0; pr(a, "You stop fighting %s."R, B.n); bc(a, A.r, "%s and %s stop fighting."R, B.n, A.n); });
+	F(if(A.t==b) { r[A.r].br&=~(1<<b); A.t=-1; if(!(r[A.r].br&~(1<<a))) r[A.r].br=0; pr(a, "You stop fighting %s."R, B.n); STA(a, A.r, " and %s stop fighting."R, A.n); });
 	B.t=-1;
 }
 
@@ -417,6 +392,7 @@ CD(ss) {
 
 CM(c_q) { /* "quit" command */
 	pr(b, "You commit suicide and lose a point."R);
+	STA(b, -1, " quits: %s."R, s);
 	cl(b);
 }
 
@@ -479,6 +455,8 @@ CD(go) { /* move into a direction (used as a commands) */
 C_S(c_say, "say", B.r); /* generates a function for "say" command */
 
 C_S(c_shout, "shout", -1); /* generates a function for "shout" command */
+
+C_S(c_scream, "scream", -1); /* generates a function for "scream" command */
 
 CM(c_name) { /* "name" command */
 	int a;
@@ -673,7 +651,7 @@ CM(c_hi) { /* "hit" command */
 						pr(b, "You stop attacking %s to attack %s!"R, pc[B.t].n, A.n);
 					} else {
 						pr(a, "%s just attacked you!"R, B.n);
-						bc(a, B.r, "%s and %s start fighting!"R, B.n, A.n);
+						STA(a, B.r, " and %s start fighting!"R, A.n);
 					}
 					B.t=a;
 					if(A.t<0) {
@@ -741,7 +719,6 @@ CM(c_eat) { /* "eat" command */
 	KS;
 }
 
-/** GLOBALS **/
 const struct {
 	char *n[9];
 	CM((*f));
@@ -750,6 +727,7 @@ const struct {
 	{{"look", "l"}, c_l},
 	{{"say", "\""}, c_say},
 	{{"shout", "!"}, c_shout},
+	{{"scream", "sc"}, c_scream},
 	{{"help", "?"}, c_h},
 	{{"name"}, c_name},
 	{{"open", "o"}, c_o},
@@ -770,8 +748,7 @@ const struct {
 	{{"eat", }, c_eat},
 };
 
-/** FUNCTIONS **/
-CM(c_h) {
+CM(c_h) { /* "help" command */
 	int i, j;
 	LIST_TAB(b, dn, dn[i][j]);
 	LIST_TAB(b, ct, ct[i].n[j]);
@@ -821,10 +798,12 @@ CD(nc) {
 	memset(B.s, 6, S(B.s)); /* initialize basic stats */
 	B.hp=B.s[hpmax]*D;
 	snprintf(B.n, S(B.n), "Someone%u", b+1);
-	wr(b, "Welcome to Deathmatch!"R
+	wr(b,"Welcome to Deathmatch!"R
 	"*** version "VER" ***"R
 	"You can get the source at http://github.com/OrangeTide/dm"R
-	"Try 'help' for commands."R R);
+	"Try 'help' for commands."R R
+	"Type \"name YourName\" to set your name."R);
+
 	wh(b);
 	c_l(b, "");
 	B.i[body+1]=id[rand()%N(id)].i; /* give player a random item */
@@ -908,7 +887,7 @@ void combat(void) {
 				if(B.hp<0) {
 					A.xp+=B.xp+1;
 					pr(b, "You die from %s's attack!!"R, A.n);
-					bc(b, -1, "%s dies from %s's attack!!"R, B.n, A.n);
+					STA(b, -1, " dies from %s's attack!!"R, A.n);
 					B.xp++; /* offset the suicide point loss */
 					cl(b);
 				}
@@ -920,8 +899,69 @@ void combat(void) {
 	}
 }
 
+void itemload(const char *n) {
+	FILE *f=fopen(n,"r");
+	if(!f){perror(n);exit(1);}
+	while(fgets(tb,S(tb),f)){
+		char *t=tb, *s, *r, *u;
+		int v=0, fl=0;
+		s=strsep(&t,"|");if(!s)goto e;
+		sscanf(s,"%d,%d", &v, &fl);
+		struct item *i = id+v;
+		i->i.v=v;
+		i->i.fl=fl;
+		s=strsep(&t,"|");if(!s)goto e;
+		escape(s);
+		r=s;
+		int j;
+		for(j=0;j<S(i->n) && (u=strsep(&r,","));j++)
+			i->n[j]=strdup(u);
+		s=strsep(&t,"|");if(!s)goto e;
+		sscanf(s,"%d,%d", &i->wl, &i->hp);
+		s=strsep(&t,"|");if(!s)goto e;
+		r=s;
+		for(j=0;j<S(i->s) && (u=strsep(&r,","));j++)
+			i->s[j]=atoi(u);
+	}
+	RET;
+e:
+	fprintf(stderr,"%s:error loading\n",n);
+	exit(1);
+}
+
+void roomload(const char *n) {
+	FILE *f=fopen(n,"r");
+	struct room *_ = r;
+	if(!f){perror(n);exit(1);}
+	while(fgets(tb,S(tb),f)){
+		char *t=tb, *s;
+		s=strsep(&t,"|");if(!s)goto e;
+		sscanf(s,"%d,%d,%d,%d,%d,%d", _->p, _->p+1, _->p+2, _->p+3, _->p+4, _->p+5);
+		s=strsep(&t,"|");if(!s)goto e;
+		escape(s);
+		_->d=strdup(s);
+		s=strsep(&t,"|");if(!s)goto e;
+		char *q=s,*u;
+		for(;(u=strsep(&q,","));) { /* initialize item instances */
+			int e=ifree(S(_->ri),_->ri,0);
+			if(e<0) break;
+			_->ri[e]=id[atoi(u)].i;
+		}
+		s=strsep(&t,"|");if(!s)goto e;
+		sscanf(s,"%d,%d", &_->e, &_->s);
+		_++;
+	}
+	RET;
+e:
+	fprintf(stderr,"%s:error loading\n",n);
+	exit(1);
+}
+
 void sh_tk(int s) { tk_fl=2; } /* signal handler for ticks */
+
 int main(int ac, char **av) {
+	itemload("items.dat");
+	roomload("rooms.dat");
 	int s, a, n, m, t;
 	struct sockaddr_in x;
 	fd_set z;
@@ -935,8 +975,10 @@ int main(int ac, char **av) {
 	CK(sigaction(SIGALRM, &sa, 0));
 	CK(s=socket(PF_INET, SOCK_STREAM, 0));
 	Z(&x);
+	int yes=1;
+	setsockopt(s,SOL_SOCKET,SO_REUSEADDR,&yes,S(yes));
 	x.sin_port=htons(ac>1?atoi(av[1]):5555);
-	CK(bind(s, &x, S(x)));
+	CK(bind(s, (struct sockaddr*)&x, S(x)));
 	CK(listen(s,1));
 	CK(fcntl(s, F_SETFL, O_NONBLOCK)); /* accept() will block sometimes */
 	for(;;) {
@@ -968,7 +1010,7 @@ int main(int ac, char **av) {
 		}
 		if(FD_ISSET(s, &z)) {
 			l=S(x);
-			t=accept(s, &x, &l);
+			t=accept(s, (struct sockaddr*)&x, &l);
 			if(t<0) {
 				perror("accept()");
 				continue;
